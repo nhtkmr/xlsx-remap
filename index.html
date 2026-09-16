@@ -99,6 +99,7 @@ table.sheet tbody th{left:0;width:40px;text-align:center}
 table.sheet thead th.corner{left:0;z-index:3}
 table.sheet td{border:1px solid var(--grid);padding:0 4px;height:22px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:cell;position:relative}
 table.sheet td.sel{box-shadow:inset 0 0 0 2px var(--focus);background-image:linear-gradient(rgba(47,111,235,.14),rgba(47,111,235,.14))}
+table.sheet td.ghost{outline:2px dashed var(--focus);outline-offset:-2px;background-image:linear-gradient(rgba(47,111,235,.08),rgba(47,111,235,.08))}
 table.sheet td.mapped{box-shadow:inset 0 0 0 2px var(--pc);background-image:linear-gradient(var(--pt),var(--pt))}
 table.sheet td.mapped.rep{box-shadow:none;outline:1px dashed var(--pc);outline-offset:-1px}
 table.sheet td.hot{box-shadow:inset 0 0 0 3px var(--pc)}
@@ -628,6 +629,17 @@ function paintCursor(side){
   const td=cellEls[side].get(p.r+","+p.c); if(td) td.classList.add("cur");
 }
 function rangeFrom(a,b){ return {r1:Math.min(a.r,b.r), c1:Math.min(a.c,b.c), r2:Math.max(a.r,b.r), c2:Math.max(a.c,b.c)}; }
+// 片側で範囲を選んだあと、もう片側で 1 セルだけ選んだら、そのセルを左上にして同じ大きさに広げる
+function projectRange(pg, g){
+  const ps=rangeSize(pg), gs=rangeSize(g);
+  if(gs.rows===1 && gs.cols===1 && (ps.rows>1 || ps.cols>1)) return {r1:g.r1, c1:g.c1, r2:g.r1+ps.rows-1, c2:g.c1+ps.cols-1};
+  return g;
+}
+function clearGhost(){ document.querySelectorAll("td.ghost").forEach(td=>td.classList.remove("ghost")); }
+function paintGhost(side, g){
+  clearGhost();
+  for(let r=g.r1;r<=g.r2;r++) for(let c=g.c1;c<=g.c2;c++){ const td=cellEls[side].get(r+","+c); if(td) td.classList.add("ghost"); }
+}
 
 document.addEventListener("pointerdown",(e)=>{
   const td=e.target.closest && e.target.closest("table.sheet td"); if(!td||e.button!==0) return;
@@ -692,6 +704,7 @@ function handleSelection(side, g){
   const sheet=S[side].sheet;
   const P=S.pending;
   if(P && P.side!==side){
+    g=projectRange(P.g, g);
     const fromSide = side==="new" ? P : {side, sheet, g};
     const toSide   = side==="new" ? {side, sheet, g} : P;
     const a=rangeSize(fromSide.g), b=rangeSize(toSide.g);
@@ -730,7 +743,7 @@ function redo(){ if(!S.future.length) return; S.history.push(snapshot()); restor
 
 /* ---------- render everything that depends on mappings ---------- */
 function renderAll(){
-  renderHighlights(); renderList(); renderHint(); renderButtons(); renderTabCounts(); renderPvBar(); scheduleLinks();
+  clearGhost(); renderHighlights(); renderList(); renderHint(); renderButtons(); renderTabCounts(); renderPvBar(); scheduleLinks();
   if(S.pending) paintSel(S.pending.side, S.pending.sheet===viewOf(S.pending.side).sheet ? S.pending.g : null); else clearSel();
 }
 function renderTabCounts(){
@@ -828,7 +841,14 @@ document.addEventListener("pointerover",(e)=>{
   const td=e.target.closest&&e.target.closest("table.sheet td");
   const id = td && td.dataset.mid ? td.dataset.mid.split(" ")[0] : null;
   setHot(id);
+  // 範囲を選んだ状態で反対側に乗せたら、貼り付け先の大きさを下見せする
+  const P=S.pending, side=td&&sideOf(td), p=td&&tdPos.get(td);
+  if(td && P && side && side!==P.side && p && !(side==="new"&&S.preview)){
+    const g=projectRange(P.g, {r1:p.r,c1:p.c,r2:p.r,c2:p.c});
+    if(g.r2>g.r1||g.c2>g.c1) paintGhost(side, g); else clearGhost();
+  } else clearGhost();
 });
+["scroll-old","scroll-new"].forEach(id=>$(id).addEventListener("pointerleave",clearGhost));
 
 /* ---------- connector lines ---------- */
 let linkRaf=0;
@@ -884,7 +904,7 @@ function renderHint(){
     h.innerHTML=`<span class="msg">左に旧フォーマット、右に新フォーマットのExcelファイルを読み込んでください。まず操作を確かめるなら「サンプルで試す」を押してください。</span>`; return;
   }
   if(!P){
-    h.innerHTML=`<span class="msg">旧のセルをクリックしてから、新のセルをクリックすると対応づけられます。ドラッグやShift+クリックで範囲も選べます。<span class="sub">明細行のように行数が変わるものは、対応一覧の「繰り返し」を押すと旧側が空行になるまで下へ転記します。キーボードなら矢印キーで移動、Shift+矢印で範囲、Enter で選択できます。</span></span>`; return;
+    h.innerHTML=`<span class="msg">旧のセルをクリックしてから、新のセルをクリックすると対応づけられます。ドラッグやShift+クリックで範囲も選べます。範囲を選んだあとは、反対側で左上の 1 セルをクリックするだけで同じ大きさの範囲が選ばれます。<span class="sub">明細行のように行数が変わるものは、対応一覧の「繰り返し」を押すと旧側が空行になるまで下へ転記します。キーボードなら矢印キーで移動、Shift+矢印で範囲、Enter で選択できます。</span></span>`; return;
   }
   const label=`${esc(P.sheet)}!${rangeStr(P.g)}`;
   if(P.side==="old"){
