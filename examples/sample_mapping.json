@@ -1,0 +1,16 @@
+{
+  "tool": "cell-mapper",
+  "version": 2,
+  "savedAt": "2026-09-16T10:00:00.000Z",
+  "oldFormat": { "fileName": "サンプル_旧申込書.xlsx", "sheets": ["申込書"] },
+  "newFormat": { "fileName": "サンプル_新申込フォーム.xlsx", "sheets": ["申込フォーム"] },
+  "mappings": [
+    { "type": "copy", "from": { "sheet": "申込書", "range": "B6" }, "to": { "sheet": "申込フォーム", "range": "C4" } },
+    { "type": "copy", "from": { "sheet": "申込書", "range": "B3" }, "to": { "sheet": "申込フォーム", "range": "C5" } },
+    { "type": "copy", "from": { "sheet": "申込書", "range": "B4" }, "to": { "sheet": "申込フォーム", "range": "C6" } },
+    { "type": "copy", "from": { "sheet": "申込書", "range": "B5" }, "to": { "sheet": "申込フォーム", "range": "C7" } },
+    { "type": "copy", "from": { "sheet": "申込書", "range": "A10" }, "to": { "sheet": "申込フォーム", "range": "B11" }, "repeat": true },
+    { "type": "copy", "from": { "sheet": "申込書", "range": "B10:C10" }, "to": { "sheet": "申込フォーム", "range": "E11:F11" }, "repeat": true },
+    { "type": "fixed", "value": "第2版", "asNumber": false, "to": { "sheet": "申込フォーム", "range": "G2" } }
+  ]
+}

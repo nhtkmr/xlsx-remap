@@ -1,0 +1,1274 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>セル対応マッパー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- ExcelJS 4.4.0 (MIT License) -->
+<script src="vendor/exceljs.min.js"></script>
+<style>
+:root{
+  --bg:#E7EAEE; --surface:#FFFFFF; --surface-2:#F3F5F7; --ink:#1B2230; --muted:#5B6574;
+  --line:#C6CCD4; --old:#4652C9; --new:#0B7F66; --danger:#B42318; --focus:#2F6FEB;
+  --paper:#FFFFFF; --grid:#E1E5EA; --head:#F1F3F6; --head-ink:#6A7380;
+  --warn-bg:#FFF4D6; --warn-ink:#5A4300; --warn-line:#E8D28A;
+  --font:"IBM Plex Sans JP","Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#161A20; --surface:#20262E; --surface-2:#2A313B; --ink:#E6E9EE; --muted:#A1AAB6;
+    --line:#3A434F; --old:#8E97FF; --new:#43C9A6; --danger:#FF7B6E; --focus:#6EA1FF;
+    --paper:#FBFBFA; --grid:#DDE1E6; --head:#2A313B; --head-ink:#A1AAB6;
+    --warn-bg:#3A3320; --warn-ink:#F3DE9A; --warn-line:#6B5B2A;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#161A20; --surface:#20262E; --surface-2:#2A313B; --ink:#E6E9EE; --muted:#A1AAB6;
+  --line:#3A434F; --old:#8E97FF; --new:#43C9A6; --danger:#FF7B6E; --focus:#6EA1FF;
+  --paper:#FBFBFA; --grid:#DDE1E6; --head:#2A313B; --head-ink:#A1AAB6;
+  --warn-bg:#3A3320; --warn-ink:#F3DE9A; --warn-line:#6B5B2A;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;display:flex;flex-direction:column;min-height:100vh}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{font-weight:600;font-size:16px;letter-spacing:.02em;margin-right:auto;display:flex;align-items:baseline;gap:10px}
+.brand small{font-weight:400;color:var(--muted);font-size:12px}
+.steps{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.step{display:flex;align-items:center;gap:6px;padding:0 4px 0 0}
+.step .n{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:600;background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.step.done .n{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.sep{width:14px;height:1px;background:var(--line)}
+.btn{border:1px solid var(--line);background:var(--surface);padding:6px 12px;border-radius:6px;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.btn.primary:hover{opacity:.9}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.small{padding:3px 9px;font-size:12px}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover{background:var(--surface-2)}
+
+/* hint bar */
+.hint{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 16px;min-height:46px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.hint .msg{flex:1 1 260px}
+.hint .sub{display:block;font-size:12px;color:var(--muted)}
+.chip{display:inline-block;padding:1px 8px;border-radius:4px;font-weight:500;font-size:13px;color:#fff}
+.chip.old{background:var(--old)} .chip.new{background:var(--new)}
+:root .chip{color:#fff}
+.hint input[type=text]{border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:var(--surface);min-width:140px}
+.hint label.chk{display:inline-flex;align-items:center;gap:4px;font-size:13px;white-space:nowrap}
+
+/* main layout */
+.main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 300px;min-height:0}
+.workspace{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 56px minmax(0,1fr);padding:14px 0 14px 14px;min-height:0}
+.pane{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:8px;min-height:0;min-width:0;overflow:hidden}
+.pane-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.pane-head .side{font-weight:600}
+.pane.old .side{color:var(--old)} .pane.new .side{color:var(--new)}
+.pane-head .fname{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.pane.old{border-top:3px solid var(--old)} .pane.new{border-top:3px solid var(--new)}
+.pane.preview{border-top-color:#C99700}
+.pvbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:6px 10px;background:var(--warn-bg);color:var(--warn-ink);border-bottom:1px solid var(--warn-line);font-size:12px}
+.pvbar span{flex:1 1 160px}
+.scroller{flex:1;overflow:auto;background:var(--paper);min-height:260px;position:relative}
+.scroller:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.tabs{display:flex;gap:2px;padding:0 6px;border-top:1px solid var(--line);background:var(--surface-2);overflow-x:auto;min-height:32px}
+.tab{border:0;background:transparent;padding:6px 12px;font-size:12px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:var(--ink);font-weight:600;background:var(--surface)}
+.pane.old .tab.on{border-bottom-color:var(--old)} .pane.new .tab.on{border-bottom-color:var(--new)}
+.tab .cnt{margin-left:5px;font-weight:400;color:var(--muted)}
+
+/* empty drop */
+.drop{height:100%;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center;color:#5B6574;background:var(--paper)}
+.drop.over{background:#EEF3FF}
+.drop p{margin:0;max-width:30ch}
+
+/* sheet grid (always paper-light, like the spreadsheet itself) */
+table.sheet{border-collapse:collapse;table-layout:fixed;font-size:12px;color:#1B2230;user-select:none;-webkit-user-select:none}
+table.sheet th{position:sticky;background:#F1F3F6;color:#6A7380;font-weight:400;font-size:11px;border:1px solid #D6DBE1;z-index:2}
+table.sheet thead th{top:0;height:20px}
+table.sheet tbody th{left:0;width:40px;text-align:center}
+table.sheet thead th.corner{left:0;z-index:3}
+table.sheet td{border:1px solid var(--grid);padding:0 4px;height:22px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:cell;position:relative}
+table.sheet td.sel{box-shadow:inset 0 0 0 2px var(--focus);background-image:linear-gradient(rgba(47,111,235,.14),rgba(47,111,235,.14))}
+table.sheet td.mapped{box-shadow:inset 0 0 0 2px var(--pc);background-image:linear-gradient(var(--pt),var(--pt))}
+table.sheet td.mapped.rep{box-shadow:none;outline:1px dashed var(--pc);outline-offset:-1px}
+table.sheet td.hot{box-shadow:inset 0 0 0 3px var(--pc)}
+table.sheet td.cur{outline:2px dashed var(--focus);outline-offset:-2px}
+table.sheet td.flash{animation:flash .9s ease-out 1}
+@keyframes flash{0%{background-color:#FFE58A}100%{}}
+.capnote{padding:6px 10px;font-size:11px;color:#6A7380}
+
+/* connector overlay */
+svg.links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5;overflow:visible}
+svg.links path{fill:none;stroke-width:2;opacity:.9}
+svg.links path.off{stroke-dasharray:4 4;opacity:.45}
+svg.links path.hot{stroke-width:3.5;opacity:1}
+svg.links circle{stroke:#fff;stroke-width:1.5}
+
+/* mapping list */
+.side-panel{border-left:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;min-height:0}
+.side-panel h2{font-size:14px;margin:0;padding:12px 14px 8px;display:flex;align-items:center;gap:8px}
+.side-panel h2 .count{color:var(--muted);font-weight:400}
+.side-tools{display:flex;gap:6px;padding:0 14px 10px;flex-wrap:wrap}
+.list{list-style:none;margin:0;padding:0 8px 14px;overflow:auto;flex:1}
+.item{display:grid;grid-template-columns:10px 1fr auto;gap:8px;align-items:start;padding:8px 6px;border-radius:6px;cursor:pointer}
+.item:hover,.item.hot{background:var(--surface-2)}
+.item .dot{width:10px;height:10px;border-radius:50%;margin-top:5px}
+.item .addr{font-size:13px;line-height:1.45;word-break:break-all}
+.item .addr .o{color:var(--old)} .item .addr .n{color:var(--new)}
+.item .arrow{color:var(--muted);padding:0 3px}
+.item .pv{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px}
+.item .tag{font-size:11px;border:1px solid var(--line);border-radius:3px;padding:0 5px;margin-right:4px;color:var(--muted)}
+.item .tools{display:flex;align-items:center;gap:2px}
+.item .rep{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:4px;font-size:11px;padding:1px 6px;line-height:1.5}
+.item .rep:hover{background:var(--surface)}
+.item .rep.on{background:var(--new);color:#fff;border-color:var(--new)}
+.item .del{border:0;background:transparent;color:var(--muted);padding:2px 6px;border-radius:4px;font-size:15px;line-height:1}
+.item .del:hover{color:var(--danger);background:var(--surface)}
+.empty-list{color:var(--muted);font-size:13px;padding:6px 14px}
+
+/* dialog */
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:0;max-width:min(520px,94vw);width:100%}
+dialog::backdrop{background:rgba(10,14,20,.45)}
+.dlg{padding:18px 20px}
+.dlg h3{margin:0 0 6px;font-size:16px}
+.dlg p{margin:6px 0;color:var(--muted)}
+.dlg p.note{background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line);border-radius:6px;padding:6px 10px;font-size:13px}
+.dlg .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;justify-content:flex-end}
+.opt{display:block;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:10px;cursor:pointer}
+.opt:hover{background:var(--surface-2)}
+.opt strong{display:block;font-weight:600}
+.opt span{color:var(--muted);font-size:13px}
+.report{margin-top:12px;font-size:13px;max-height:200px;overflow:auto;background:var(--surface-2);border-radius:6px;padding:8px 10px;white-space:pre-wrap}
+
+/* toast */
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:8px 14px;border-radius:8px;font-size:13px;z-index:50;max-width:90vw;opacity:0;transition:opacity .15s}
+.toast.show{opacity:1}
+.toast.err{background:var(--danger);color:#fff}
+
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+@media (max-width:1100px){
+  .main{grid-template-columns:1fr}
+  .workspace{padding:12px}
+  .side-panel{border-left:0;border-top:1px solid var(--line);max-height:none}
+  .list{max-height:320px}
+}
+@media (max-width:760px){
+  .workspace{grid-template-columns:1fr;grid-template-rows:auto 40px auto}
+  .scroller{min-height:220px;max-height:46vh}
+  .brand small{display:none}
+  .steps{display:none}
+}
+@media (prefers-reduced-motion:reduce){ table.sheet td.flash{animation:none} .toast{transition:none} }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">セル対応マッパー <small>旧フォーマット → 新フォーマット</small></div>
+  <div class="steps" aria-label="進み具合">
+    <div class="step" id="st1"><span class="n">1</span>読み込む</div><span class="sep"></span>
+    <div class="step" id="st2"><span class="n">2</span>対応づける</div><span class="sep"></span>
+    <div class="step" id="st3"><span class="n">3</span>保存・変換</div>
+  </div>
+  <button class="btn" id="btnSample">サンプルで試す</button>
+  <button class="btn" id="btnLoadJson">対応表を開く</button>
+  <button class="btn" id="btnSaveJson" disabled>対応表を保存</button>
+  <button class="btn" id="btnPreview" disabled title="いま開いている旧ファイルを変換した結果を右側に表示します（保存はしません）">プレビュー</button>
+  <button class="btn primary" id="btnConvert" disabled>変換する</button>
+</header>
+
+<div class="hint" id="hint" aria-live="polite"></div>
+
+<main class="main">
+  <section class="workspace" id="workspace">
+    <div class="pane old" id="pane-old">
+      <div class="pane-head"><span class="side">旧フォーマット</span><span class="fname" id="fname-old">未読み込み</span><button class="btn small ghost" data-open="old">ファイルを選ぶ</button></div>
+      <div class="scroller" id="scroll-old" tabindex="0" aria-label="旧フォーマットのシート。矢印キーで移動、Shift+矢印で範囲、Enterで選択"></div>
+      <div class="tabs" id="tabs-old"></div>
+    </div>
+    <div aria-hidden="true"></div>
+    <div class="pane new" id="pane-new">
+      <div class="pane-head"><span class="side">新フォーマット</span><span class="fname" id="fname-new">未読み込み</span><button class="btn small ghost" data-open="new">ファイルを選ぶ</button></div>
+      <div class="pvbar" id="pvbar" hidden><span id="pvmsg"></span><button class="btn small" id="btnPvRefresh">更新</button><button class="btn small" id="btnPvClose">プレビューを閉じる</button></div>
+      <div class="scroller" id="scroll-new" tabindex="0" aria-label="新フォーマットのシート。矢印キーで移動、Shift+矢印で範囲、Enterで選択"></div>
+      <div class="tabs" id="tabs-new"></div>
+    </div>
+    <svg class="links" id="links" aria-hidden="true"></svg>
+  </section>
+
+  <aside class="side-panel">
+    <h2>対応一覧 <span class="count" id="count">0件</span></h2>
+    <div class="side-tools">
+      <button class="btn small" id="btnUndo" disabled>元に戻す</button>
+      <button class="btn small" id="btnRedo" disabled>やり直す</button>
+      <button class="btn small" id="btnClear" disabled>すべて削除</button>
+    </div>
+    <ul class="list" id="list"></ul>
+  </aside>
+</main>
+
+<input type="file" id="fileOld" accept=".xlsx,.xlsm" class="sr">
+<input type="file" id="fileNew" accept=".xlsx,.xlsm" class="sr">
+<input type="file" id="fileJson" accept=".json,application/json" class="sr">
+<input type="file" id="fileBatch" accept=".xlsx,.xlsm" multiple class="sr">
+
+<dialog id="dlgConvert">
+  <div class="dlg">
+    <h3>新フォーマットに変換する</h3>
+    <p>新フォーマットのファイルをそのまま複写し、対応づけたセルの値だけを書き換えます。マクロ（.xlsm）・画像・グラフ・入力規則などはそのまま残ります。</p>
+    <p class="note">書き込み先のセルに数式が入っている場合は、値で上書きします。</p>
+    <label class="opt" id="optCurrent" tabindex="0"><strong>いま開いている旧ファイルを変換</strong><span id="optCurrentName"></span></label>
+    <label class="opt" id="optOther" tabindex="0"><strong>別の旧ファイルを選んで変換</strong><span>複数選ぶと1つずつ変換して保存します</span></label>
+    <div class="report" id="report" hidden></div>
+    <div class="row"><button class="btn" id="dlgClose">閉じる</button></div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+"use strict";
+const $ = (id) => document.getElementById(id);
+const PAIR_COLORS = ["#E4572E","#2E86DE","#17A589","#9B51C4","#C99700","#D1336F","#3F7F2E","#7A5A3A"];
+const MAX_ROWS = 300, MAX_COLS = 52;
+const REPEAT_MAX_ROWS = 20000;   // 繰り返し転記の上限（無限ループ防止）
+
+/* ---------- address helpers ---------- */
+const colLetters = (c) => { let s=""; while(c>0){ const m=(c-1)%26; s=String.fromCharCode(65+m)+s; c=Math.floor((c-1)/26);} return s; };
+const lettersCol = (s) => [...s.toUpperCase()].reduce((a,ch)=>a*26+(ch.charCodeAt(0)-64),0);
+const addr = (r,c) => colLetters(c)+r;
+function parseAddr(a){ const m=/^([A-Za-z]+)(\d+)$/.exec(a.trim()); if(!m) return null; return {r:+m[2], c:lettersCol(m[1])}; }
+function parseRange(s){
+  const [a,b] = String(s).split(":"); const p=parseAddr(a||""); const q=b?parseAddr(b):p;
+  if(!p||!q) return null;
+  return {r1:Math.min(p.r,q.r), c1:Math.min(p.c,q.c), r2:Math.max(p.r,q.r), c2:Math.max(p.c,q.c)};
+}
+const rangeStr = (g) => (g.r1===g.r2&&g.c1===g.c2) ? addr(g.r1,g.c1) : addr(g.r1,g.c1)+":"+addr(g.r2,g.c2);
+const rangeSize = (g) => ({rows:g.r2-g.r1+1, cols:g.c2-g.c1+1});
+const overlaps = (a,b) => !(a.r2<b.r1||b.r2<a.r1||a.c2<b.c1||b.c2<a.c1);
+const inRange = (g,r,c) => r>=g.r1&&r<=g.r2&&c>=g.c1&&c<=g.c2;
+const isCleanNumber = (s) => /^-?(0|[1-9]\d*)(\.\d+)?$/.test(String(s).trim());  // 先頭ゼロなし・半角数字のみ
+
+/* ---------- state ---------- */
+const S = {
+  old: {wb:null, buf:null, name:"", sheet:null},
+  new: {wb:null, buf:null, name:"", sheet:null},
+  preview: null,  // {wb, sheet, name, stale} 変換結果のプレビュー（新側に一時表示）
+  mappings: [],   // {id, type:'copy'|'fixed', from:{sheet,range}, to:{sheet,range}, repeat, value, asNumber, color}
+  pending: null,  // {side, sheet, g}
+  history: [], future: [],
+  dirty: false,
+  nextColor: 0,
+};
+const cellEls = {old:new Map(), new:new Map()}; // "r,c" -> td (covered merge cells point to master td)
+const tdPos = new WeakMap();
+const paneDims = {old:{r:0,c:0}, new:{r:0,c:0}};
+const viewOf = (side) => (side==="new" && S.preview) ? S.preview : S[side];  // 表示中のブック（プレビュー中は差し替え）
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg, err=false){
+  const t=$("toast"); t.textContent=msg; t.className="toast show"+(err?" err":"");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.className="toast"+(err?" err":""), err?4200:2400);
+}
+
+/* ---------- downloads ---------- */
+function saveFile(filename, data){
+  const blob = data instanceof Blob ? data : new Blob([data]);
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  return true;
+}
+
+/* ---------- number format (表示用の簡易実装) ---------- */
+function pad(n){return String(n).padStart(2,"0");}
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTHS_LONG=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const WD=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], WD_LONG=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const JWD=["日","月","火","水","木","金","土"];
+const ERA_INITIAL={"令和":"R","平成":"H","昭和":"S","大正":"T","明治":"M"};
+function fmtSections(fmt){ // ; で区切る（引用符・角括弧の中は除く）
+  const out=[]; let cur="", q=false, b=false;
+  for(const ch of fmt){
+    if(q){ cur+=ch; if(ch==='"') q=false; continue; }
+    if(b){ cur+=ch; if(ch===']') b=false; continue; }
+    if(ch==='"'){ q=true; cur+=ch; continue; }
+    if(ch==='['){ b=true; cur+=ch; continue; }
+    if(ch===';'){ out.push(cur); cur=""; continue; }
+    cur+=ch;
+  }
+  out.push(cur); return out;
+}
+function tokenize(sec){
+  const toks=[]; let i=0; const n=sec.length;
+  const lit=(v)=>{ const last=toks[toks.length-1]; if(last&&last.t==="lit") last.v+=v; else toks.push({t:"lit",v}); };
+  while(i<n){
+    const ch=sec[i];
+    if(ch==='"'){ const j=sec.indexOf('"',i+1); lit(sec.slice(i+1, j<0?n:j)); i=(j<0?n:j+1); continue; }
+    if(ch==='\\'){ lit(sec[i+1]||""); i+=2; continue; }
+    if(ch==='_'){ lit(" "); i+=2; continue; }
+    if(ch==='*'){ i+=2; continue; }
+    if(ch==='['){
+      const j=sec.indexOf(']',i); const body=sec.slice(i+1, j<0?n:j); i=(j<0?n:j+1);
+      if(body[0]==='$'){ const k=body.indexOf('-'); lit(k<0?body.slice(1):body.slice(1,k)); }
+      else if(/^(h+|m+|s+)$/i.test(body)) toks.push({t:"date", v:body.toLowerCase()});
+      continue;
+    }
+    if(ch==='%'){ toks.push({t:"pct"}); i++; continue; }
+    if(ch==='@'){ toks.push({t:"text"}); i++; continue; }
+    if((ch==='E'||ch==='e') && (sec[i+1]==='+'||sec[i+1]==='-')){ toks.push({t:"sci"}); i+=2; continue; }
+    if(/[0#?]/.test(ch)){ let j=i; while(j<n && /[0#?,.]/.test(sec[j])) j++; toks.push({t:"num", v:sec.slice(i,j)}); i=j; continue; }
+    const ap=/^(AM\/PM|A\/P)/i.exec(sec.slice(i));
+    if(ap){ toks.push({t:"ampm", v:ap[1]}); i+=ap[1].length; continue; }
+    if(/[ymdhsgea]/i.test(ch)){ const c=ch.toLowerCase(); let j=i; while(j<n && sec[j].toLowerCase()===c) j++; toks.push({t:"date", v:c.repeat(j-i)}); i=j; continue; }
+    lit(ch); i++;
+  }
+  return toks;
+}
+function jpEra(d){
+  try{
+    const parts=new Intl.DateTimeFormat("ja-JP-u-ca-japanese",{era:"long",year:"numeric",timeZone:"UTC"}).formatToParts(d);
+    const era=(parts.find(p=>p.type==="era")||{}).value||"", yr=(parts.find(p=>p.type==="year")||{}).value||"";
+    return {era, year: yr==="元" ? 1 : (parseInt(yr,10)||d.getUTCFullYear())};
+  }catch(e){ return {era:"", year:d.getUTCFullYear()}; }
+}
+function fmtDateToks(d, toks){
+  const Y=d.getUTCFullYear(), M=d.getUTCMonth()+1, D=d.getUTCDate(), h=d.getUTCHours(), mi=d.getUTCMinutes(), s=d.getUTCSeconds(), wd=d.getUTCDay();
+  const ampm=toks.some(t=>t.t==="ampm");
+  let out="";
+  toks.forEach((t,i)=>{
+    if(t.t==="lit"){ out+=t.v; return; }
+    if(t.t==="ampm"){ out+= t.v.length>3 ? (h<12?"AM":"PM") : (h<12?"A":"P"); return; }
+    if(t.t!=="date") return;
+    const c=t.v[0], L=t.v.length;
+    switch(c){
+      case 'y': out+= L<=2 ? pad(Y%100) : String(Y); break;
+      case 'm': {
+        let prev=null; for(let k=i-1;k>=0;k--) if(toks[k].t==="date"){prev=toks[k];break;}
+        let next=null; for(let k=i+1;k<toks.length;k++) if(toks[k].t==="date"){next=toks[k];break;}
+        const isMin=(prev&&prev.v[0]==='h')||(next&&next.v[0]==='s');
+        if(isMin) out+= L>=2?pad(mi):String(mi);
+        else if(L>=4) out+=MONTHS_LONG[M-1]; else if(L===3) out+=MONTHS[M-1]; else out+= L===2?pad(M):String(M);
+        break; }
+      case 'd': if(L>=4) out+=WD_LONG[wd]; else if(L===3) out+=WD[wd]; else out+= L===2?pad(D):String(D); break;
+      case 'h': { const hh=ampm?(h%12||12):h; out+= L>=2?pad(hh):String(hh); break; }
+      case 's': out+= L>=2?pad(s):String(s); break;
+      case 'a': out+= L>=4 ? JWD[wd]+"曜日" : JWD[wd]; break;
+      case 'g': { const e=jpEra(d).era; out+= L>=3 ? e : (L===2 ? e.slice(0,1) : (ERA_INITIAL[e]||e.slice(0,1))); break; }
+      case 'e': { const y=jpEra(d).year; out+= L>=2?pad(y):String(y); break; }
+    }
+  });
+  return out;
+}
+function fmtDate(d, fmt){
+  if(!fmt||/^general$/i.test(fmt)) return null;
+  const toks=tokenize(fmtSections(fmt)[0]);
+  if(!toks.some(t=>t.t==="date")) return null;
+  return fmtDateToks(d, toks);
+}
+const serialToDate = (n) => new Date(Date.UTC(1899,11,30) + Math.round(n*86400000));
+function fmtNum(n, fmt){
+  if(!fmt||/^general$/i.test(fmt)) return null;
+  const secs=fmtSections(fmt); let sec, neg=false;
+  if(n<0){ n=-n; if(secs.length>=2) sec=secs[1]; else { sec=secs[0]; neg=true; } }
+  else if(n===0 && secs.length>=3) sec=secs[2]; else sec=secs[0];
+  const toks=tokenize(sec);
+  if(toks.some(t=>t.t==="date")) return fmtDateToks(serialToDate(neg?-n:n), toks);
+  if(toks.some(t=>t.t==="sci")) return null;
+  const nums=toks.filter(t=>t.t==="num"); if(nums.length>1) return null;   // 分数書式などは扱わない
+  if(toks.some(t=>t.t==="pct")) n*=100;
+  let numStr="";
+  if(nums.length){
+    const p=nums[0].v, dot=p.indexOf('.');
+    const intP=dot<0?p:p.slice(0,dot), decP=dot<0?"":p.slice(dot+1);
+    const decMax=(decP.match(/[0#?]/g)||[]).length, decMin=(decP.match(/0/g)||[]).length;
+    const intMin=(intP.match(/0/g)||[]).length, group=intP.includes(',');
+    const parts=n.toFixed(decMax).split('.'); let ip=parts[0], dp=parts[1]||"";
+    if(/e/i.test(ip)) return null;
+    while(dp.length>decMin && dp.endsWith('0')) dp=dp.slice(0,-1);
+    if(ip.length<intMin) ip=ip.padStart(intMin,'0');
+    if(group) ip=ip.replace(/\B(?=(\d{3})+(?!\d))/g,",");
+    numStr=ip+(dp?"."+dp:"");
+  }
+  let out=""; toks.forEach(t=>{ if(t.t==="lit") out+=t.v; else if(t.t==="num") out+=numStr; else if(t.t==="pct") out+="%"; });
+  return (neg?"-":"")+out;
+}
+
+/* ---------- value helpers ---------- */
+function displayText(v, numFmt){
+  if(v===null||v===undefined) return "";
+  if(v instanceof Date){
+    try{ const s=fmtDate(v,numFmt); if(s!==null) return s; }catch(e){}
+    return v.getUTCFullYear()+"/"+pad(v.getUTCMonth()+1)+"/"+pad(v.getUTCDate());
+  }
+  if(typeof v==="object"){
+    if(Array.isArray(v.richText)) return v.richText.map(x=>x.text).join("");
+    if("formula" in v || "sharedFormula" in v) return displayText(v.result, numFmt);
+    if("hyperlink" in v) return displayText(v.text, numFmt);
+    if("error" in v) return String(v.error);
+    return "";
+  }
+  if(typeof v==="boolean") return v?"TRUE":"FALSE";
+  if(typeof v==="number"){
+    try{ const s=fmtNum(v,numFmt); if(s!==null) return s; }catch(e){}
+    return Number.isInteger(v)?String(v):String(Math.round(v*1e6)/1e6);
+  }
+  return String(v);
+}
+// 転記する値。数式は計算結果、リッチテキストは文字だけにして新側の書式を優先する
+function plainValue(v){
+  if(v && typeof v==="object" && !(v instanceof Date)){
+    if("formula" in v || "sharedFormula" in v){ const r=v.result; return (r && typeof r==="object" && "error" in r) ? null : (r===undefined?null:r); }
+    if(Array.isArray(v.richText)) return v.richText.map(x=>x.text).join("");
+    if("hyperlink" in v) return plainValue(v.text);
+  }
+  return v===undefined?null:v;
+}
+const isBlank = (v) => { const p=plainValue(v); return p===null||p===""; };
+
+/* ---------- colors (テーマ色にも対応) ---------- */
+const THEME_ORDER=["lt1","dk1","lt2","dk2","accent1","accent2","accent3","accent4","accent5","accent6","hlink","folHlink"];
+const THEME_DEFAULT=["#FFFFFF","#000000","#E7E6E6","#44546A","#4472C4","#ED7D31","#A5A5A5","#FFC000","#5B9BD5","#70AD47","#0563C1","#954F72"];
+const themeCache=new WeakMap();
+function themeColors(wb){
+  if(themeCache.has(wb)) return themeCache.get(wb);
+  let cols=THEME_DEFAULT.slice();
+  try{
+    const xml=wb._themes && wb._themes.theme1;
+    if(xml){
+      const doc=new DOMParser().parseFromString(xml,"application/xml");
+      cols=THEME_ORDER.map((tag,i)=>{
+        const el=doc.getElementsByTagNameNS("*",tag)[0]; const c=el&&el.firstElementChild; if(!c) return cols[i];
+        const v=c.localName==="sysClr" ? c.getAttribute("lastClr") : c.getAttribute("val");
+        return (v&&/^[0-9A-Fa-f]{6}$/.test(v)) ? "#"+v.toUpperCase() : cols[i];
+      });
+    }
+  }catch(e){}
+  themeCache.set(wb,cols); return cols;
+}
+function applyTint(hex,t){
+  if(!t) return hex;
+  let [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255);
+  const max=Math.max(r,g,b), min=Math.min(r,g,b); let h=0,s=0,l=(max+min)/2;
+  if(max!==min){ const d=max-min; s=l>.5?d/(2-max-min):d/(max+min); if(max===r)h=((g-b)/d+(g<b?6:0))/6; else if(max===g)h=((b-r)/d+2)/6; else h=((r-g)/d+4)/6; }
+  l = t<0 ? l*(1+t) : l*(1-t)+t;
+  const hue=(p,q,x)=>{ if(x<0)x+=1; if(x>1)x-=1; if(x<1/6)return p+(q-p)*6*x; if(x<1/2)return q; if(x<2/3)return p+(q-p)*(2/3-x)*6; return p; };
+  let R,G,B; if(s===0){ R=G=B=l; } else { const q=l<.5?l*(1+s):l+s-l*s, p=2*l-q; R=hue(p,q,h+1/3); G=hue(p,q,h); B=hue(p,q,h-1/3); }
+  return "#"+[R,G,B].map(x=>Math.round(Math.max(0,Math.min(1,x))*255).toString(16).padStart(2,"0")).join("").toUpperCase();
+}
+function argbToCss(argb){ if(!argb||typeof argb!=="string"||argb.length<6) return null; return "#"+argb.slice(-6).toUpperCase(); }
+function colorCss(wb, col){
+  if(!col) return null;
+  if(col.argb) return argbToCss(col.argb);
+  if(typeof col.theme==="number"){ const base=themeColors(wb)[col.theme]; return base ? applyTint(base, col.tint||0) : null; }
+  return null;
+}
+
+/* ---------- merges ---------- */
+const mergeCache=new WeakMap();
+function mergesOf(ws){
+  if(mergeCache.has(ws)) return mergeCache.get(ws);
+  const m=(ws.model.merges||[]).map(parseRange).filter(Boolean);
+  mergeCache.set(ws,m); return m;
+}
+// 範囲 tg のうち、同じ結合セルに 2 セル以上が入る箇所の数（結合セルには 1 つの値しか入らない）
+function mergeCollisions(ws, tg){
+  let n=0;
+  for(const g of mergesOf(ws)){
+    if(!overlaps(g,tg)) continue;
+    const cells=(Math.min(g.r2,tg.r2)-Math.max(g.r1,tg.r1)+1)*(Math.min(g.c2,tg.c2)-Math.max(g.c1,tg.c1)+1);
+    if(cells>1) n++;
+  }
+  return n;
+}
+
+/* ---------- repeat (空行まで繰り返し) ---------- */
+function blockHasData(ws, r0, g){
+  for(let dr=0;dr<=g.r2-g.r1;dr++) for(let dc=0;dc<=g.c2-g.c1;dc++) if(!isBlank(ws.getCell(r0+dr,g.c1+dc).value)) return true;
+  return false;
+}
+// 旧側の範囲 g を先頭ブロックとして、空のブロックに当たるまで何ブロック続くか（先頭を含む）
+function repeatCount(ws, g){
+  const h=g.r2-g.r1+1; let k=1;
+  while(k*h<REPEAT_MAX_ROWS && blockHasData(ws, g.r1+k*h, g)) k++;
+  return k;
+}
+function blocksOf(m){
+  if(m.type!=="copy"||!m.repeat||!S.old.wb) return 1;
+  const ws=S.old.wb.getWorksheet(m.from.sheet); if(!ws) return 1;
+  return repeatCount(ws, parseRange(m.from.range));
+}
+
+/* ---------- file loading ---------- */
+async function loadWorkbook(side, file){
+  if(!/\.(xlsx|xlsm)$/i.test(file.name)){ toast("読み込めるのは .xlsx / .xlsm です。.xls はExcelで .xlsx に保存し直してください。", true); return; }
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(buf.slice(0));
+    if(!wb.worksheets.length) throw new Error("シートがありません");
+    setWorkbook(side, wb, buf, file.name);
+  }catch(e){ toast(file.name+" を読み込めませんでした: "+e.message, true); }
+}
+function setWorkbook(side, wb, buf, name){
+  const st=S[side]; st.wb=wb; st.buf=buf; st.name=name; st.sheet=wb.worksheets[0].name;
+  if(side==="new") S.preview=null;
+  if(S.pending && S.pending.side===side) S.pending=null;
+  cursor[side]=null; kAnchor[side]=null;
+  renderPane(side); renderAll();
+  const stale = S.mappings.filter(m=>{ const ref = side==="old"?m.from:m.to; return ref && !wb.getWorksheet(ref.sheet); });
+  if(stale.length) toast("対応表のうち "+stale.length+" 件は、このファイルに無いシートを参照しています", true);
+}
+
+/* ---------- grid rendering ---------- */
+function renderPane(side){
+  const st=viewOf(side), sc=$("scroll-"+side), tabs=$("tabs-"+side);
+  $("fname-"+side).textContent = st.name || "未読み込み";
+  if(side==="new") $("pane-new").classList.toggle("preview", !!S.preview);
+  cellEls[side].clear();
+  if(!st.wb){
+    sc.innerHTML = `<div class="drop" data-side="${side}"><p>${side==="old"?"旧":"新"}フォーマットのExcelファイルをここにドロップ</p><button class="btn" data-open="${side}">ファイルを選ぶ</button></div>`;
+    tabs.innerHTML=""; paneDims[side]={r:0,c:0}; return;
+  }
+  const ws = st.wb.getWorksheet(st.sheet) || st.wb.worksheets[0]; st.sheet=ws.name;
+
+  // bounds
+  let maxR = Math.max(ws.rowCount||0, 30), maxC = Math.max(ws.columnCount||0, 10);
+  const merges = mergesOf(ws);
+  merges.forEach(g=>{ maxR=Math.max(maxR,g.r2); maxC=Math.max(maxC,g.c2); });
+  S.mappings.forEach(m=>{ const ref = side==="old"?m.from:m.to; if(ref&&ref.sheet===ws.name){ const g=parseRange(ref.range); if(g){maxR=Math.max(maxR,g.r2+2); maxC=Math.max(maxC,g.c2+1);} } });
+  const capped = maxR>MAX_ROWS || maxC>MAX_COLS;
+  maxR=Math.min(maxR+3,MAX_ROWS); maxC=Math.min(maxC+2,MAX_COLS);
+  paneDims[side]={r:maxR,c:maxC};
+
+  const masterAt=new Map(), covered=new Set();
+  merges.forEach(g=>{ masterAt.set(g.r1+","+g.c1,g); for(let r=g.r1;r<=g.r2;r++) for(let c=g.c1;c<=g.c2;c++) if(r!==g.r1||c!==g.c1) covered.add(r+","+c); });
+
+  const table=document.createElement("table"); table.className="sheet";
+  const colg=document.createElement("colgroup");
+  const c0=document.createElement("col"); c0.style.width="40px"; colg.appendChild(c0);
+  let totalW=40;
+  for(let c=1;c<=maxC;c++){ const w=ws.getColumn(c).width; const px=Math.max(36,Math.min(260,Math.round((w||9)*7.2+6))); const col=document.createElement("col"); col.style.width=px+"px"; colg.appendChild(col); totalW+=px; }
+  table.style.width=totalW+"px"; table.appendChild(colg);
+
+  const thead=document.createElement("thead"); const hr=document.createElement("tr");
+  const corner=document.createElement("th"); corner.className="corner"; hr.appendChild(corner);
+  for(let c=1;c<=maxC;c++){ const th=document.createElement("th"); th.textContent=colLetters(c); hr.appendChild(th); }
+  thead.appendChild(hr); table.appendChild(thead);
+
+  const tbody=document.createElement("tbody");
+  for(let r=1;r<=maxR;r++){
+    const tr=document.createElement("tr"); const row=ws.getRow(r);
+    if(row.height) tr.style.height=Math.max(18,Math.round(row.height*1.33))+"px";
+    const th=document.createElement("th"); th.textContent=r; tr.appendChild(th);
+    for(let c=1;c<=maxC;c++){
+      const key=r+","+c;
+      if(covered.has(key)) continue;
+      const td=document.createElement("td");
+      const g=masterAt.get(key);
+      if(g){ if(g.c2>g.c1) td.colSpan=Math.min(g.c2,maxC)-g.c1+1; if(g.r2>g.r1) td.rowSpan=Math.min(g.r2,maxR)-g.r1+1; }
+      const cell=row.getCell(c);
+      const txt=displayText(cell.value, cell.numFmt); if(txt){ td.textContent=txt; td.title=txt; }
+      styleTd(td, cell, st.wb);
+      td.dataset.r=r; td.dataset.c=c;
+      tdPos.set(td,{r,c,g});
+      cellEls[side].set(key,td);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  merges.forEach(g=>{ const m=cellEls[side].get(g.r1+","+g.c1); if(!m) return; for(let r=g.r1;r<=g.r2;r++) for(let c=g.c1;c<=g.c2;c++) cellEls[side].set(r+","+c,m); });
+  table.appendChild(tbody);
+  sc.innerHTML=""; sc.appendChild(table);
+  if(capped){ const n=document.createElement("div"); n.className="capnote"; n.textContent=`表示は ${MAX_ROWS} 行・${MAX_COLS} 列までです。変換はシート全体が対象です。`; sc.appendChild(n); }
+  if(cursor[side]){ cursor[side]={r:Math.min(cursor[side].r,maxR), c:Math.min(cursor[side].c,maxC)}; }
+  paintCursor(side);
+
+  // tabs
+  tabs.innerHTML="";
+  st.wb.worksheets.forEach(w=>{
+    const b=document.createElement("button"); b.className="tab"+(w.name===st.sheet?" on":""); b.type="button";
+    const n=S.mappings.filter(m=>{const ref=side==="old"?m.from:m.to; return ref&&ref.sheet===w.name;}).length;
+    b.textContent=w.name; if(n){ const s=document.createElement("span"); s.className="cnt"; s.textContent=n; b.appendChild(s); }
+    b.addEventListener("click",()=>{ st.sheet=w.name; renderPane(side); renderAll(); });
+    tabs.appendChild(b);
+  });
+}
+function styleTd(td, cell, wb){
+  const s=cell.style||{};
+  const fill=s.fill; if(fill&&fill.type==="pattern"&&fill.pattern==="solid"){ const col=colorCss(wb, fill.fgColor); if(col) td.style.backgroundColor=col; }
+  const f=s.font; if(f){ if(f.bold) td.style.fontWeight="600"; if(f.italic) td.style.fontStyle="italic"; const col=colorCss(wb, f.color); if(col&&col!=="#000000") td.style.color=col; if(f.size&&f.size>=14) td.style.fontSize=Math.min(18,f.size)+"px"; }
+  const al=s.alignment; if(al&&al.horizontal){ td.style.textAlign = al.horizontal==="centerContinuous"?"center":al.horizontal; }
+  else if(typeof plainValue(cell.value)==="number") td.style.textAlign="right";
+  const b=s.border; if(b){ ["top","right","bottom","left"].forEach(k=>{ if(b[k]&&b[k].style){ td.style["border"+k[0].toUpperCase()+k.slice(1)] = (b[k].style==="thick"||b[k].style==="medium"?"2px":"1px")+" solid #3B434F"; } }); }
+}
+
+/* ---------- selection & pairing ---------- */
+let drag=null;
+const cursor={old:null,new:null}, kAnchor={old:null,new:null};   // キーボード操作用のカーソルと範囲の起点
+function sideOf(el){ const p=el.closest(".pane"); return p? (p.classList.contains("old")?"old":"new") : null; }
+function clearSel(){ document.querySelectorAll("td.sel").forEach(td=>td.classList.remove("sel")); }
+function paintSel(side, g){
+  clearSel(); if(!g) return;
+  for(let r=g.r1;r<=g.r2;r++) for(let c=g.c1;c<=g.c2;c++){ const td=cellEls[side].get(r+","+c); if(td) td.classList.add("sel"); }
+}
+function paintCursor(side){
+  $("scroll-"+side).querySelectorAll("td.cur").forEach(t=>t.classList.remove("cur"));
+  const p=cursor[side]; if(!p) return;
+  const td=cellEls[side].get(p.r+","+p.c); if(td) td.classList.add("cur");
+}
+function rangeFrom(a,b){ return {r1:Math.min(a.r,b.r), c1:Math.min(a.c,b.c), r2:Math.max(a.r,b.r), c2:Math.max(a.c,b.c)}; }
+
+document.addEventListener("pointerdown",(e)=>{
+  const td=e.target.closest && e.target.closest("table.sheet td"); if(!td||e.button!==0) return;
+  const side=sideOf(td), p=tdPos.get(td); if(!side||!p) return;
+  cursor[side]={r:p.r,c:p.c}; kAnchor[side]=null; paintCursor(side);
+  if(e.pointerType==="mouse"){
+    e.preventDefault();
+    $("scroll-"+side).focus({preventScroll:true});
+    let anchor={r:p.r,c:p.c};
+    if(e.shiftKey && S.pending && S.pending.side===side && S.pending.sheet===viewOf(side).sheet){ anchor={r:S.pending.g.r1,c:S.pending.g.c1}; }
+    const endR = p.g? p.g.r1 : p.r, endC = p.g? p.g.c1 : p.c;
+    drag={side, anchor, g:rangeFrom(anchor,{r:endR,c:endC}), mouse:true};
+    paintSel(side, drag.g);
+  } else {
+    drag={side, anchor:{r:p.r,c:p.c}, g:{r1:p.r,c1:p.c,r2:p.r,c2:p.c}, mouse:false, td};
+  }
+});
+document.addEventListener("pointermove",(e)=>{
+  if(!drag||!drag.mouse) return;
+  const el=document.elementFromPoint(e.clientX,e.clientY); const td=el&&el.closest&&el.closest("table.sheet td");
+  if(!td||sideOf(td)!==drag.side) return;
+  const p=tdPos.get(td); if(!p) return;
+  const g=rangeFrom(drag.anchor,p);
+  if(p.g){ g.r2=Math.max(g.r2,p.g.r1); g.c2=Math.max(g.c2,p.g.c1); }
+  if(rangeStr(g)!==rangeStr(drag.g)){ drag.g=g; paintSel(drag.side,g); }
+});
+document.addEventListener("pointerup",(e)=>{
+  if(!drag) return; const d=drag; drag=null;
+  if(!d.mouse){ const el=document.elementFromPoint(e.clientX,e.clientY); if(!el||el.closest("td")!==d.td) return; }
+  handleSelection(d.side, d.g);
+});
+document.addEventListener("pointercancel",()=>{ drag=null; });
+
+// キーボード操作：矢印で移動、Shift+矢印で範囲、Enter/Space で選択
+["old","new"].forEach(side=>{
+  const sc=$("scroll-"+side);
+  sc.addEventListener("keydown",(e)=>{
+    if(!viewOf(side).wb || e.ctrlKey || e.metaKey || e.altKey) return;
+    const dims=paneDims[side]; let dr=0, dc=0;
+    switch(e.key){
+      case "ArrowUp": dr=-1; break; case "ArrowDown": dr=1; break;
+      case "ArrowLeft": dc=-1; break; case "ArrowRight": dc=1; break;
+      case "PageUp": dr=-10; break; case "PageDown": dr=10; break;
+      case "Enter": case " ":
+        if(!cursor[side]) return;
+        e.preventDefault();
+        handleSelection(side, rangeFrom(kAnchor[side]||cursor[side], cursor[side])); kAnchor[side]=null; return;
+      default: return;
+    }
+    e.preventDefault();
+    const cur=cursor[side];
+    const nx = cur ? {r:Math.min(dims.r,Math.max(1,cur.r+dr)), c:Math.min(dims.c,Math.max(1,cur.c+dc))} : {r:1,c:1};
+    if(e.shiftKey){ if(!kAnchor[side]) kAnchor[side]=cur||nx; } else kAnchor[side]=null;
+    cursor[side]=nx; paintCursor(side);
+    paintSel(side, rangeFrom(kAnchor[side]||nx, nx));
+    const td=cellEls[side].get(nx.r+","+nx.c); if(td) td.scrollIntoView({block:"nearest",inline:"nearest"});
+  });
+});
+
+function handleSelection(side, g){
+  if(side==="new" && S.preview){ toast("プレビュー中は対応づけできません。「プレビューを閉じる」を押してください", true); renderAll(); return; }
+  const sheet=S[side].sheet;
+  const P=S.pending;
+  if(P && P.side!==side){
+    const fromSide = side==="new" ? P : {side, sheet, g};
+    const toSide   = side==="new" ? {side, sheet, g} : P;
+    const a=rangeSize(fromSide.g), b=rangeSize(toSide.g);
+    if(a.rows!==b.rows||a.cols!==b.cols){
+      toast(`範囲の大きさを揃えてください（旧 ${a.rows}行×${a.cols}列 / 新 ${b.rows}行×${b.cols}列）`, true);
+      S.pending={side, sheet, g}; renderAll(); return;
+    }
+    addMapping({type:"copy", from:{sheet:fromSide.sheet, range:rangeStr(fromSide.g)}, to:{sheet:toSide.sheet, range:rangeStr(toSide.g)}, repeat:false});
+    S.pending=null; renderAll(); return;
+  }
+  S.pending={side, sheet, g};
+  renderAll();
+}
+
+/* ---------- mappings & history ---------- */
+const snapshot = () => JSON.stringify({m:S.mappings, n:S.nextColor});
+function commit(){ S.history.push(snapshot()); if(S.history.length>200) S.history.shift(); S.future=[]; S.dirty=true; if(S.preview) S.preview.stale=true; }
+function restore(json){ const o=JSON.parse(json); S.mappings=o.m; S.nextColor=o.n; if(S.preview) S.preview.stale=true; }
+function addMapping(m){
+  const tg=parseRange(m.to.range);
+  const conflicts=S.mappings.filter(x=>x.to.sheet===m.to.sheet && overlaps(parseRange(x.to.range),tg));
+  commit();
+  if(conflicts.length){ S.mappings=S.mappings.filter(x=>!conflicts.includes(x)); }
+  m.id="m"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  m.color=S.nextColor++ % PAIR_COLORS.length;
+  S.mappings.push(m);
+  const ws=S.new.wb && S.new.wb.getWorksheet(m.to.sheet);
+  const coll = (ws && m.type==="copy") ? mergeCollisions(ws, tg) : 0;
+  if(coll) toast(`対応を追加しました。ただし新側の結合セルに複数のセルが重なっています（${coll} か所）。結合セルには最後の値だけが残ります`, true);
+  else toast(conflicts.length ? `対応を追加しました（重なっていた ${conflicts.length} 件を置き換え）` : "対応を追加しました");
+}
+function removeMapping(id){ commit(); S.mappings=S.mappings.filter(m=>m.id!==id); renderAll(); }
+function toggleRepeat(id){ const m=S.mappings.find(x=>x.id===id); if(!m||m.type!=="copy") return; commit(); m.repeat=!m.repeat; renderAll(); }
+function undo(){ if(!S.history.length) return; S.future.push(snapshot()); restore(S.history.pop()); S.pending=null; renderAll(); }
+function redo(){ if(!S.future.length) return; S.history.push(snapshot()); restore(S.future.pop()); S.pending=null; renderAll(); }
+
+/* ---------- render everything that depends on mappings ---------- */
+function renderAll(){
+  renderHighlights(); renderList(); renderHint(); renderButtons(); renderTabCounts(); renderPvBar(); scheduleLinks();
+  if(S.pending) paintSel(S.pending.side, S.pending.sheet===viewOf(S.pending.side).sheet ? S.pending.g : null); else clearSel();
+}
+function renderTabCounts(){
+  ["old","new"].forEach(side=>{
+    const st=viewOf(side); if(!st.wb) return;
+    const btns=$("tabs-"+side).querySelectorAll(".tab");
+    st.wb.worksheets.forEach((w,i)=>{ const b=btns[i]; if(!b) return;
+      const n=S.mappings.filter(m=>{const ref=side==="old"?m.from:m.to; return ref&&ref.sheet===w.name;}).length;
+      let s=b.querySelector(".cnt"); if(n){ if(!s){s=document.createElement("span"); s.className="cnt"; b.appendChild(s);} s.textContent=n; } else if(s) s.remove();
+    });
+  });
+}
+function tint(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16},${(n>>8)&255},${n&255},${a})`; }
+function renderHighlights(){
+  document.querySelectorAll("td.mapped").forEach(td=>{ td.classList.remove("mapped","hot","rep"); td.style.removeProperty("--pc"); td.style.removeProperty("--pt"); delete td.dataset.mid; });
+  S.mappings.forEach(m=>{
+    const col=PAIR_COLORS[m.color%PAIR_COLORS.length];
+    const blocks=blocksOf(m);
+    [["old",m.from],["new",m.to]].forEach(([side,ref])=>{
+      if(!ref||!viewOf(side).wb||ref.sheet!==viewOf(side).sheet) return;
+      const g=parseRange(ref.range); if(!g) return;
+      const h=g.r2-g.r1+1;
+      for(let k=0;k<blocks;k++) for(let r=g.r1;r<=g.r2;r++) for(let c=g.c1;c<=g.c2;c++){
+        const td=cellEls[side].get((r+k*h)+","+c); if(!td) continue;
+        if(k>0 && td.classList.contains("mapped")) continue;   // 繰り返し分は他の対応を上書きしない
+        td.classList.add("mapped"); td.classList.toggle("rep", k>0);
+        td.style.setProperty("--pc",col); td.style.setProperty("--pt",tint(col,k>0?.06:.13));
+        td.dataset.mid=(td.dataset.mid?td.dataset.mid+" ":"")+m.id;
+      }
+    });
+  });
+}
+function previewOf(m){
+  if(m.type==="fixed") return "固定値: "+m.value+(m.asNumber?"（数値）":"");
+  const wb=S.old.wb; if(!wb) return m.repeat?"空行まで繰り返し":"";
+  const ws=wb.getWorksheet(m.from.sheet); if(!ws) return "（シートが見つかりません）";
+  const g=parseRange(m.from.range); const cell=ws.getCell(g.r1,g.c1); const t=displayText(cell.value, cell.numFmt);
+  const sz=rangeSize(g); let s=(t||"（空）")+(sz.rows*sz.cols>1?` ほか ${sz.rows*sz.cols-1} セル`:"");
+  if(m.repeat){ const b=blocksOf(m); s+=`　空行まで繰り返し（${b} 回・${b*sz.rows} 行）`; }
+  return s;
+}
+function renderList(){
+  const ul=$("list"); ul.innerHTML="";
+  $("count").textContent=S.mappings.length+"件";
+  if(!S.mappings.length){ ul.innerHTML='<li class="empty-list">まだ対応はありません。旧のセル、新のセルの順にクリックすると、ここに並びます。</li>'; return; }
+  S.mappings.forEach(m=>{
+    const li=document.createElement("li"); li.className="item"; li.dataset.mid=m.id; li.tabIndex=0;
+    const col=PAIR_COLORS[m.color%PAIR_COLORS.length];
+    const fromTxt = m.type==="fixed" ? '<span class="tag">固定値</span>' : `<span class="o">${esc(m.from.sheet)}!${m.from.range}</span>`;
+    const repBtn = m.type==="copy" ? `<button class="rep${m.repeat?" on":""}" type="button" aria-pressed="${m.repeat?"true":"false"}" title="旧側が空行になるまで、この範囲を下へ繰り返して転記します（明細行向け）">繰り返し</button>` : "";
+    li.innerHTML=`<span class="dot" style="background:${col}"></span>
+      <div><div class="addr">${fromTxt}<span class="arrow">→</span><span class="n">${esc(m.to.sheet)}!${m.to.range}</span></div>
+      <div class="pv">${esc(previewOf(m))}</div></div>
+      <div class="tools">${repBtn}<button class="del" type="button" aria-label="この対応を削除">×</button></div>`;
+    li.querySelector(".del").addEventListener("click",(e)=>{ e.stopPropagation(); removeMapping(m.id); });
+    const rb=li.querySelector(".rep"); if(rb) rb.addEventListener("click",(e)=>{ e.stopPropagation(); toggleRepeat(m.id); });
+    li.addEventListener("click",()=>focusMapping(m));
+    li.addEventListener("keydown",(e)=>{ if(e.target!==li) return; if(e.key==="Enter") focusMapping(m); if(e.key==="Delete"||e.key==="Backspace") removeMapping(m.id); });
+    li.addEventListener("mouseenter",()=>setHot(m.id)); li.addEventListener("mouseleave",()=>setHot(null));
+    ul.appendChild(li);
+  });
+}
+function esc(s){ return String(s).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch])); }
+function focusMapping(m){
+  [["old",m.from],["new",m.to]].forEach(([side,ref])=>{
+    const v=viewOf(side);
+    if(!ref||!v.wb||!v.wb.getWorksheet(ref.sheet)) return;
+    if(v.sheet!==ref.sheet){ v.sheet=ref.sheet; renderPane(side); }
+  });
+  renderAll();
+  [["old",m.from],["new",m.to]].forEach(([side,ref])=>{
+    if(!ref) return; const g=parseRange(ref.range); const td=cellEls[side].get(g.r1+","+g.c1); if(!td) return;
+    const sc=$("scroll-"+side); const tr=td.getBoundingClientRect(), sr=sc.getBoundingClientRect();
+    sc.scrollTop += (tr.top-sr.top) - sc.clientHeight/2 + tr.height/2;
+    sc.scrollLeft += (tr.left-sr.left) - sc.clientWidth/2 + tr.width/2;
+    td.classList.remove("flash"); void td.offsetWidth; td.classList.add("flash");
+  });
+  scheduleLinks();
+}
+
+/* ---------- hover partner ---------- */
+let hotId=null;
+function setHot(id){
+  if(hotId===id) return; hotId=id;
+  document.querySelectorAll("td.hot").forEach(t=>t.classList.remove("hot"));
+  document.querySelectorAll(".item.hot").forEach(t=>t.classList.remove("hot"));
+  if(id){
+    document.querySelectorAll("td.mapped").forEach(td=>{ if((td.dataset.mid||"").split(" ").includes(id)) td.classList.add("hot"); });
+    const li=document.querySelector(`.item[data-mid="${id}"]`); if(li) li.classList.add("hot");
+  }
+  scheduleLinks();
+}
+document.addEventListener("pointerover",(e)=>{
+  if(e.pointerType!=="mouse"||drag) return;
+  const td=e.target.closest&&e.target.closest("table.sheet td");
+  const id = td && td.dataset.mid ? td.dataset.mid.split(" ")[0] : null;
+  setHot(id);
+});
+
+/* ---------- connector lines ---------- */
+let linkRaf=0;
+function scheduleLinks(){ if(!linkRaf) linkRaf=requestAnimationFrame(()=>{ linkRaf=0; drawLinks(); }); }
+function drawLinks(){
+  const svg=$("links"), ws=$("workspace"); const base=ws.getBoundingClientRect();
+  const so=$("scroll-old").getBoundingClientRect(), sn=$("scroll-new").getBoundingClientRect();
+  const vertical = sn.top >= so.bottom - 2;
+  let out="";
+  const clampRect=(rect,box)=>{
+    const x1=Math.max(rect.left,box.left), x2=Math.min(rect.right,box.right), y1=Math.max(rect.top,box.top), y2=Math.min(rect.bottom,box.bottom);
+    const visible = rect.right>box.left && rect.left<box.right && rect.bottom>box.top && rect.top<box.bottom;
+    return {visible, left:Math.min(x1,box.right), right:Math.max(x2,box.left), top:Math.min(y1,box.bottom), bottom:Math.max(y2,box.top)};
+  };
+  const rectOf=(side,g)=>{
+    const a=cellEls[side].get(g.r1+","+g.c1), b=cellEls[side].get(g.r2+","+g.c2); if(!a||!b) return null;
+    const ra=a.getBoundingClientRect(), rb=b.getBoundingClientRect();
+    return {left:Math.min(ra.left,rb.left), right:Math.max(ra.right,rb.right), top:Math.min(ra.top,rb.top), bottom:Math.max(ra.bottom,rb.bottom)};
+  };
+  const ordered=[...S.mappings].sort((a,b)=>(a.id===hotId)-(b.id===hotId));
+  ordered.forEach(m=>{
+    if(m.type!=="copy"||!S.old.wb||!viewOf("new").wb) return;
+    if(m.from.sheet!==S.old.sheet||m.to.sheet!==viewOf("new").sheet) return;
+    const ro=rectOf("old",parseRange(m.from.range)), rn=rectOf("new",parseRange(m.to.range)); if(!ro||!rn) return;
+    const co=clampRect(ro,so), cn=clampRect(rn,sn);
+    const col=PAIR_COLORS[m.color%PAIR_COLORS.length];
+    let x1,y1,x2,y2,d;
+    if(!vertical){
+      x1=co.right-base.left; y1=(co.top+co.bottom)/2-base.top;
+      x2=cn.left-base.left;  y2=(cn.top+cn.bottom)/2-base.top;
+      const dx=Math.max(40,(x2-x1)*.5); d=`M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}`;
+    } else {
+      x1=(co.left+co.right)/2-base.left; y1=co.bottom-base.top;
+      x2=(cn.left+cn.right)/2-base.left; y2=cn.top-base.top;
+      const dy=Math.max(30,(y2-y1)*.5); d=`M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2}`;
+    }
+    const cls=[(!co.visible||!cn.visible)?"off":"", m.id===hotId?"hot":""].join(" ");
+    out+=`<path class="${cls}" d="${d}" stroke="${col}"/>`;
+    if(co.visible) out+=`<circle cx="${x1}" cy="${y1}" r="3.5" fill="${col}"/>`;
+    if(cn.visible) out+=`<circle cx="${x2}" cy="${y2}" r="3.5" fill="${col}"/>`;
+  });
+  svg.innerHTML=out;
+}
+["scroll-old","scroll-new"].forEach(id=>$(id).addEventListener("scroll",scheduleLinks,{passive:true}));
+window.addEventListener("resize",scheduleLinks);
+window.addEventListener("scroll",scheduleLinks,{passive:true});
+if(window.ResizeObserver) new ResizeObserver(scheduleLinks).observe($("workspace"));
+
+/* ---------- hint bar & buttons ---------- */
+function renderHint(){
+  const h=$("hint"); const P=S.pending;
+  if(!S.old.wb||!S.new.wb){
+    h.innerHTML=`<span class="msg">左に旧フォーマット、右に新フォーマットのExcelファイルを読み込んでください。まず操作を確かめるなら「サンプルで試す」を押してください。</span>`; return;
+  }
+  if(!P){
+    h.innerHTML=`<span class="msg">旧のセルをクリックしてから、新のセルをクリックすると対応づけられます。ドラッグやShift+クリックで範囲も選べます。<span class="sub">明細行のように行数が変わるものは、対応一覧の「繰り返し」を押すと旧側が空行になるまで下へ転記します。キーボードなら矢印キーで移動、Shift+矢印で範囲、Enter で選択できます。</span></span>`; return;
+  }
+  const label=`${esc(P.sheet)}!${rangeStr(P.g)}`;
+  if(P.side==="old"){
+    h.innerHTML=`<span class="msg"><span class="chip old">旧 ${label}</span> を選んでいます。新フォーマット側で書き込み先をクリックしてください。</span><button class="btn small" id="hCancel">選択をやめる</button>`;
+  } else {
+    h.innerHTML=`<span class="msg"><span class="chip new">新 ${label}</span> を選んでいます。旧フォーマット側で元のセルをクリックするか、決まった値を入れます。</span>
+      <input type="text" id="hFixed" placeholder="例：第2版" aria-label="固定値"><label class="chk"><input type="checkbox" id="hNum"> 数値として入れる</label><button class="btn small" id="hFixedBtn">固定値を入れる</button><button class="btn small" id="hCancel">選択をやめる</button>`;
+    let numTouched=false;
+    $("hNum").addEventListener("change",()=>{ numTouched=true; });
+    $("hFixed").addEventListener("input",()=>{ if(!numTouched) $("hNum").checked=isCleanNumber($("hFixed").value); });
+    const doFixed=()=>{ const v=$("hFixed").value; if(v===""){ toast("入れる値を入力してください", true); $("hFixed").focus(); return; }
+      addMapping({type:"fixed", value:v, asNumber:$("hNum").checked, to:{sheet:P.sheet, range:rangeStr(P.g)}}); S.pending=null; renderAll(); };
+    $("hFixedBtn").addEventListener("click",doFixed);
+    $("hFixed").addEventListener("keydown",(e)=>{ if(e.key==="Enter") doFixed(); });
+  }
+  $("hCancel").addEventListener("click",()=>{ S.pending=null; renderAll(); });
+}
+function renderButtons(){
+  const both=!!(S.old.wb&&S.new.wb), has=S.mappings.length>0;
+  $("btnSaveJson").disabled=!has; $("btnConvert").disabled=!(has&&S.new.wb); $("btnPreview").disabled=!(has&&both);
+  $("btnUndo").disabled=!S.history.length; $("btnRedo").disabled=!S.future.length; $("btnClear").disabled=!has;
+  $("st1").classList.toggle("done",both); $("st2").classList.toggle("done",has); $("st3").classList.toggle("done",!S.dirty&&has);
+}
+function renderPvBar(){
+  const bar=$("pvbar"); bar.hidden=!S.preview; if(!S.preview) return;
+  $("pvmsg").textContent = S.preview.stale ? "対応表が変わりました。「更新」を押すと最新の変換結果を表示します。" : "変換結果のプレビューです（ファイルはまだ保存していません）。";
+  $("btnPvRefresh").hidden=!S.preview.stale;
+}
+
+/* ---------- JSON save / load ---------- */
+$("btnSaveJson").addEventListener("click",()=>{
+  const data={
+    tool:"cell-mapper", version:2, savedAt:new Date().toISOString(),
+    oldFormat:{fileName:S.old.name||null, sheets:S.old.wb?S.old.wb.worksheets.map(w=>w.name):null},
+    newFormat:{fileName:S.new.name||null, sheets:S.new.wb?S.new.wb.worksheets.map(w=>w.name):null},
+    mappings:S.mappings.map(m=>{
+      const o={type:m.type};
+      if(m.type==="copy"){ o.from={...m.from}; if(m.repeat) o.repeat=true; } else { o.value=m.value; o.asNumber=!!m.asNumber; }
+      o.to={...m.to};
+      if(m.type==="copy"&&S.old.wb){ const w=S.old.wb.getWorksheet(m.from.sheet); if(w){ const g=parseRange(m.from.range); const c=w.getCell(g.r1,g.c1); o.sampleValue=displayText(c.value, c.numFmt); } }
+      return o;
+    })
+  };
+  const base=(S.new.name||"mapping").replace(/\.[^.]+$/,"");
+  saveFile(base+"_対応表.json", JSON.stringify(data,null,2));
+  S.dirty=false; renderButtons(); toast("対応表を保存しました");
+});
+$("btnLoadJson").addEventListener("click",()=>$("fileJson").click());
+$("fileJson").addEventListener("change",async(e)=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  try{
+    const o=JSON.parse(await f.text());
+    if(!o||!Array.isArray(o.mappings)) throw new Error("mappings が見つかりません");
+    const list=[]; let skipped=0;
+    o.mappings.forEach(x=>{
+      const to=x.to&&parseRange(x.to.range); if(!to||!x.to.sheet){skipped++;return;}
+      if(x.type==="fixed"){
+        const value=String(x.value??"");
+        // 旧形式（asNumber なし）は「数値に見えるなら数値」だった。先頭ゼロ付きは文字列のままにする
+        const asNumber = x.asNumber===undefined ? isCleanNumber(value) : x.asNumber===true;
+        list.push({type:"fixed", value, asNumber, to:{sheet:x.to.sheet, range:rangeStr(to)}}); return;
+      }
+      const fr=x.from&&parseRange(x.from.range); if(!fr||!x.from.sheet){skipped++;return;}
+      const a=rangeSize(fr), b=rangeSize(to); if(a.rows!==b.rows||a.cols!==b.cols){skipped++;return;}
+      list.push({type:"copy", from:{sheet:x.from.sheet, range:rangeStr(fr)}, to:{sheet:x.to.sheet, range:rangeStr(to)}, repeat:x.repeat===true});
+    });
+    commit();
+    S.mappings=list.map((m,i)=>({...m, id:"m"+i+Date.now().toString(36), color:i%PAIR_COLORS.length})); S.nextColor=list.length;
+    S.dirty=false; S.pending=null;
+    if(S.old.wb) renderPane("old"); if(viewOf("new").wb) renderPane("new");
+    renderAll();
+    toast(`対応表を開きました（${list.length} 件${skipped?`、読めなかった ${skipped} 件は除外`:""}）`);
+  }catch(err){ toast("対応表を開けませんでした: "+err.message, true); }
+});
+
+/* ---------- minimal ZIP (新フォーマットの中身をそのまま複写し、書き換えたパーツだけ再圧縮する) ---------- */
+const CRC_TABLE=(()=>{ const t=new Int32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c; } return t; })();
+function crc32(u8){ let c=-1; for(let i=0;i<u8.length;i++) c=CRC_TABLE[(c^u8[i])&255]^(c>>>8); return (c^-1)>>>0; }
+function zipEntries(buf){
+  const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  const dv=new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let e=-1; for(let i=u8.length-22;i>=Math.max(0,u8.length-65558);i--){ if(dv.getUint32(i,true)===0x06054b50){ e=i; break; } }
+  if(e<0) throw new Error("ZIP 形式ではありません");
+  const count=dv.getUint16(e+10,true), cdOff=dv.getUint32(e+16,true);
+  if(count===0xFFFF||cdOff===0xFFFFFFFF) throw new Error("ZIP64 形式には対応していません");
+  const dec=new TextDecoder(); const out=[]; let p=cdOff;
+  for(let i=0;i<count;i++){
+    if(dv.getUint32(p,true)!==0x02014b50) throw new Error("ZIP の目次が壊れています");
+    const flags=dv.getUint16(p+8,true), method=dv.getUint16(p+10,true), time=dv.getUint16(p+12,true), date=dv.getUint16(p+14,true);
+    const crc=dv.getUint32(p+16,true), csize=dv.getUint32(p+20,true), usize=dv.getUint32(p+24,true);
+    const nlen=dv.getUint16(p+28,true), xlen=dv.getUint16(p+30,true), clen=dv.getUint16(p+32,true), off=dv.getUint32(p+42,true);
+    if(flags&1) throw new Error("暗号化された ZIP には対応していません");
+    const name=dec.decode(u8.subarray(p+46,p+46+nlen));
+    if(dv.getUint32(off,true)!==0x04034b50) throw new Error("ZIP のエントリが壊れています");
+    const dstart=off+30+dv.getUint16(off+26,true)+dv.getUint16(off+28,true);
+    out.push({name, method, time, date, crc, csize, usize, data:u8.subarray(dstart,dstart+csize)});
+    p+=46+nlen+xlen+clen;
+  }
+  return out;
+}
+async function pipeStream(u8, stream){
+  const w=stream.writable.getWriter(); w.write(u8); w.close();
+  const rd=stream.readable.getReader(); const chunks=[]; let n=0;
+  for(;;){ const {value,done}=await rd.read(); if(done) break; chunks.push(value); n+=value.length; }
+  const out=new Uint8Array(n); let p=0; chunks.forEach(c=>{ out.set(c,p); p+=c.length; }); return out;
+}
+async function inflateRaw(u8){ if(typeof DecompressionStream==="undefined") throw new Error("このブラウザは ZIP の展開に対応していません"); return pipeStream(u8, new DecompressionStream("deflate-raw")); }
+async function deflateRaw(u8){ if(typeof CompressionStream==="undefined") return null; return pipeStream(u8, new CompressionStream("deflate-raw")); }
+async function entryText(en){
+  const raw = en.method===0 ? en.data : en.method===8 ? await inflateRaw(en.data) : null;
+  if(!raw) throw new Error(en.name+" の圧縮方式に対応していません");
+  return new TextDecoder().decode(raw);
+}
+function zipBuild(entries){
+  const enc=new TextEncoder(); const parts=[], cd=[]; let off=0;
+  const u16=(v)=>[v&255,(v>>8)&255], u32=(v)=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
+  for(const en of entries){
+    const nm=enc.encode(en.name);
+    const lh=new Uint8Array([...u32(0x04034b50),...u16(20),...u16(0x0800),...u16(en.method),...u16(en.time),...u16(en.date),...u32(en.crc),...u32(en.csize),...u32(en.usize),...u16(nm.length),...u16(0)]);
+    parts.push(lh,nm,en.data);
+    cd.push(new Uint8Array([...u32(0x02014b50),...u16(20),...u16(20),...u16(0x0800),...u16(en.method),...u16(en.time),...u16(en.date),...u32(en.crc),...u32(en.csize),...u32(en.usize),...u16(nm.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(off)]), nm);
+    off+=lh.length+nm.length+en.data.length;
+  }
+  let cdLen=0; cd.forEach(x=>cdLen+=x.length);
+  const eocd=new Uint8Array([...u32(0x06054b50),...u16(0),...u16(0),...u16(entries.length),...u16(entries.length),...u32(cdLen),...u32(off),...u16(0)]);
+  const out=new Uint8Array(off+cdLen+eocd.length); let p=0;
+  for(const x of [...parts,...cd,eocd]){ out.set(x,p); p+=x.length; }
+  return out;
+}
+
+/* ---------- OOXML 直接編集：対応づけたセルだけを書き換え、それ以外のパーツには触らない ---------- */
+const NS_MAIN="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+const NS_REL="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const NS_XML="http://www.w3.org/XML/1998/namespace";
+function parseXml(text){ const doc=new DOMParser().parseFromString(text,"application/xml"); if(doc.getElementsByTagName("parsererror").length) throw new Error("XML を読めません"); return doc; }
+function serializeXml(doc){ const s=new XMLSerializer().serializeToString(doc); return s.startsWith("<?xml") ? s : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'+s; }
+const childEls=(el,name)=>[...el.childNodes].filter(n=>n.nodeType===1&&n.localName===name);
+// セルに値を書く。戻り値は null（成功）か、書けなかった理由
+function setCellXml(doc, sheetData, r, c, val, ctx){
+  let row=null, before=null;
+  for(const el of childEls(sheetData,"row")){ const rr=+el.getAttribute("r"); if(rr===r){ row=el; break; } if(rr>r){ before=el; break; } }
+  if(!row){ row=doc.createElementNS(NS_MAIN,"row"); row.setAttribute("r",String(r)); sheetData.insertBefore(row,before); }
+  let cell=null; before=null;
+  for(const el of childEls(row,"c")){ const p=parseAddr(el.getAttribute("r")||""); if(!p) continue; if(p.c===c){ cell=el; break; } if(p.c>c){ before=el; break; } }
+  if(!cell){ cell=doc.createElementNS(NS_MAIN,"c"); cell.setAttribute("r",addr(r,c)); row.insertBefore(cell,before); }
+  const f=childEls(cell,"f")[0];
+  if(f && f.getAttribute("t")==="shared" && f.hasAttribute("ref")) return "shared";   // 共有数式の元セル：消すと他のセルの数式も壊れる
+  if(f) ctx.formulaRemoved=true;
+  while(cell.firstChild) cell.removeChild(cell.firstChild);
+  ["t","cm","vm"].forEach(a=>cell.removeAttribute(a));
+  const v=(text)=>{ const e=doc.createElementNS(NS_MAIN,"v"); e.textContent=text; cell.appendChild(e); };
+  if(val===null||val===undefined||val==="") return null;
+  if(typeof val==="number"){ if(Number.isFinite(val)) v(String(val)); return null; }
+  if(typeof val==="boolean"){ cell.setAttribute("t","b"); v(val?"1":"0"); return null; }
+  if(val instanceof Date){ const serial=(val.getTime()-Date.UTC(1899,11,30))/86400000-(ctx.date1904?1462:0); if(Number.isFinite(serial)) v(String(serial)); return null; }
+  const s=String(val).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,"");
+  cell.setAttribute("t","inlineStr");
+  const is=doc.createElementNS(NS_MAIN,"is"), t=doc.createElementNS(NS_MAIN,"t");
+  if(/^\s|\s$/.test(s)) t.setAttributeNS(NS_XML,"xml:space","preserve");
+  t.textContent=s; is.appendChild(t); cell.appendChild(is);
+  return null;
+}
+async function writeViaZip(templateBuf, ops, problems){
+  const entries=zipEntries(templateBuf); const byName=new Map(entries.map(e=>[e.name,e]));
+  const need=(n)=>{ const e=byName.get(n); if(!e) throw new Error(n+" がありません"); return e; };
+  const wbDoc=parseXml(await entryText(need("xl/workbook.xml")));
+  const relDoc=parseXml(await entryText(need("xl/_rels/workbook.xml.rels")));
+  const rels={}; [...relDoc.getElementsByTagNameNS("*","Relationship")].forEach(x=>{ rels[x.getAttribute("Id")]=x.getAttribute("Target")||""; });
+  const partOf=new Map();
+  [...wbDoc.getElementsByTagNameNS("*","sheet")].forEach(s=>{
+    const rid=s.getAttributeNS(NS_REL,"id")||s.getAttribute("r:id"); let t=rels[rid]||"";
+    t = t.startsWith("/") ? t.slice(1) : "xl/"+t.replace(/^\.\//,"");
+    partOf.set(s.getAttribute("name"), t);
+  });
+  const wbPr=wbDoc.getElementsByTagNameNS("*","workbookPr")[0];
+  const date1904 = !!wbPr && /^(1|true)$/i.test(wbPr.getAttribute("date1904")||"");
+  const bySheet=new Map(); ops.forEach(o=>{ if(!bySheet.has(o.sheet)) bySheet.set(o.sheet,[]); bySheet.get(o.sheet).push(o); });
+  const replaced=new Map(); let formulaRemoved=false;
+  for(const [sheet,list] of bySheet){
+    const part=partOf.get(sheet);
+    if(!part||!byName.has(part)||!/worksheets\//.test(part)){ problems.push(`新フォーマットのシート「${sheet}」に書き込めません（ワークシートではないか、実体が見つかりません）`); continue; }
+    const doc=parseXml(await entryText(byName.get(part)));
+    const sheetData=doc.getElementsByTagNameNS("*","sheetData")[0]; if(!sheetData) throw new Error(part+" に sheetData がありません");
+    const merges=[...doc.getElementsByTagNameNS("*","mergeCell")].map(e=>parseRange(e.getAttribute("ref")||"")).filter(Boolean);
+    const ctx={date1904, formulaRemoved:false};
+    for(const o of list){
+      let r=o.r, c=o.c; const mg=merges.find(g=>inRange(g,r,c)); if(mg){ r=mg.r1; c=mg.c1; }   // 結合セルは左上に書く（Excel と同じ）
+      if(setCellXml(doc, sheetData, r, c, o.val, ctx)==="shared") problems.push(`新側「${sheet}!${addr(r,c)}」は共有数式の元セルなので書き込めませんでした。テンプレート側で数式を消してください`);
+    }
+    if(ctx.formulaRemoved) formulaRemoved=true;
+    replaced.set(part, serializeXml(doc));
+  }
+  // 書き込んだ値を参照する数式が古い結果のまま表示されないよう、次回の開始時に再計算させる
+  const calcPr=wbDoc.getElementsByTagNameNS("*","calcPr")[0];
+  if(calcPr){ calcPr.setAttribute("fullCalcOnLoad","1"); replaced.set("xl/workbook.xml", serializeXml(wbDoc)); }
+  const drop=new Set();
+  if(formulaRemoved && byName.has("xl/calcChain.xml")){   // 数式を消したセルが計算チェーンに残っていると Excel が修復を求めるので外す（Excel が開くときに作り直す）
+    drop.add("xl/calcChain.xml");
+    [...relDoc.getElementsByTagNameNS("*","Relationship")].filter(x=>/calcChain\.xml$/.test(x.getAttribute("Target")||"")).forEach(x=>x.parentNode.removeChild(x));
+    replaced.set("xl/_rels/workbook.xml.rels", serializeXml(relDoc));
+    const ctDoc=parseXml(await entryText(need("[Content_Types].xml")));
+    [...ctDoc.getElementsByTagNameNS("*","Override")].filter(x=>(x.getAttribute("PartName")||"")==="/xl/calcChain.xml").forEach(x=>x.parentNode.removeChild(x));
+    replaced.set("[Content_Types].xml", serializeXml(ctDoc));
+  }
+  const out=[]; const enc=new TextEncoder();
+  for(const en of entries){
+    if(drop.has(en.name)) continue;
+    if(!replaced.has(en.name)){ out.push(en); continue; }
+    const raw=enc.encode(replaced.get(en.name)); const def=await deflateRaw(raw); const data=def||raw;
+    out.push({name:en.name, method:def?8:0, time:en.time, date:en.date, crc:crc32(raw), csize:data.length, usize:raw.length, data});
+  }
+  return zipBuild(out);
+}
+async function writeViaExcelJS(templateBuf, ops){
+  const out=new ExcelJS.Workbook(); await out.xlsx.load(templateBuf.slice(0));
+  ops.forEach(o=>{ const ws=out.getWorksheet(o.sheet); if(ws) ws.getCell(o.r,o.c).value=o.val; });
+  return new Uint8Array(await out.xlsx.writeBuffer());
+}
+
+/* ---------- convert ---------- */
+const templateExt = () => (/\.xlsm$/i.test(S.new.name) ? ".xlsm" : ".xlsx");
+// 対応表を「どのセルに何を書くか」の一覧に展開する
+function planWrites(srcWb, srcName){
+  const ops=[], problems=[], notes=[];
+  for(const m of S.mappings){
+    const tws=S.new.wb.getWorksheet(m.to.sheet); if(!tws){ problems.push(`新フォーマットにシート「${m.to.sheet}」がありません`); continue; }
+    const tg=parseRange(m.to.range);
+    if(m.type==="fixed"){
+      const val = (m.asNumber && m.value.trim()!=="" && !isNaN(Number(m.value))) ? Number(m.value) : m.value;
+      for(let r=tg.r1;r<=tg.r2;r++) for(let c=tg.c1;c<=tg.c2;c++) ops.push({sheet:m.to.sheet, r, c, val});
+      continue;
+    }
+    const sws=srcWb.getWorksheet(m.from.sheet); if(!sws){ problems.push(`${srcName} にシート「${m.from.sheet}」がありません（${m.from.range} → ${m.to.range}）`); continue; }
+    const sg=parseRange(m.from.range), h=sg.r2-sg.r1+1;
+    if(mergeCollisions(tws, tg)) problems.push(`新側「${m.to.sheet}!${m.to.range}」は結合セルにまたがっています。結合セルには 1 つの値しか入りません`);
+    const blocks = m.repeat ? repeatCount(sws, sg) : 1;
+    for(let k=0;k<blocks;k++) for(let dr=0;dr<h;dr++) for(let dc=0;dc<=sg.c2-sg.c1;dc++){
+      ops.push({sheet:m.to.sheet, r:tg.r1+k*h+dr, c:tg.c1+dc, val:plainValue(sws.getCell(sg.r1+k*h+dr, sg.c1+dc).value)});
+    }
+    if(m.repeat && blocks>1) notes.push(`${m.from.sheet}!${m.from.range} → ${m.to.sheet}!${m.to.range}：${blocks} 回繰り返して ${blocks*h} 行を書き込みました`);
+  }
+  return {ops, problems, notes};
+}
+async function convertOne(srcWb, srcName){
+  const {ops, problems, notes}=planWrites(srcWb, srcName);
+  let buf, ext=templateExt();
+  try{ buf=await writeViaZip(S.new.buf, ops, problems); }
+  catch(e){
+    // テンプレートを直接編集できないときだけ ExcelJS で書き直す（マクロ・画像などが失われることがある）
+    notes.push(`新フォーマットを直接編集できなかったため（${e.message}）、ExcelJS で書き直しました。マクロ・画像・グラフは失われることがあります`);
+    buf=await writeViaExcelJS(S.new.buf, ops); ext=".xlsx";
+  }
+  return {buf, ext, written:ops.length, problems:[...new Set(problems)], notes};
+}
+function outName(srcName, ext){
+  const b=(srcName||"converted").replace(/\.[^.]+$/,""); return b+"_新フォーマット"+(ext||".xlsx");
+}
+async function runConvert(files){
+  const rep=$("report"); rep.hidden=false; rep.textContent="変換しています…";
+  const lines=[];
+  for(const f of files){
+    try{
+      let wb=f.wb;
+      if(!wb){ wb=new ExcelJS.Workbook(); await wb.xlsx.load(await f.file.arrayBuffer()); }
+      const {buf,ext,written,problems,notes}=await convertOne(wb,f.name);
+      saveFile(outName(f.name,ext), new Blob([buf]));
+      lines.push(`${f.name}: ${written} セルを書き込み、保存しました`);
+      notes.forEach(p=>lines.push("  情報: "+p));
+      problems.forEach(p=>lines.push("  注意: "+p));
+    }catch(e){ lines.push(`${f.name}: 変換できませんでした（${e.message}）`); }
+    rep.textContent=lines.join("\n");
+  }
+  if(lines.length && !S.dirty) renderButtons();
+}
+$("btnConvert").addEventListener("click",()=>{
+  $("report").hidden=true; $("report").textContent="";
+  $("optCurrent").style.display = S.old.wb?"":"none";
+  $("optCurrentName").textContent = S.old.name;
+  $("dlgConvert").showModal();
+});
+$("dlgClose").addEventListener("click",()=>$("dlgConvert").close());
+const actCurrent=()=>{ if(S.old.wb) runConvert([{wb:S.old.wb, name:S.old.name}]); };
+const actOther=()=>$("fileBatch").click();
+$("optCurrent").addEventListener("click",actCurrent); $("optOther").addEventListener("click",actOther);
+$("optCurrent").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();actCurrent();} });
+$("optOther").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();actOther();} });
+$("fileBatch").addEventListener("change",(e)=>{ const fs=[...e.target.files].map(file=>({file,name:file.name})); e.target.value=""; if(fs.length) runConvert(fs); });
+
+/* ---------- preview (変換結果を新側に一時表示) ---------- */
+async function runPreview(){
+  if(!(S.old.wb&&S.new.wb&&S.mappings.length)) return;
+  try{
+    const {buf,written,problems}=await convertOne(S.old.wb,S.old.name);
+    const wb=new ExcelJS.Workbook(); await wb.xlsx.load(buf.buffer.slice(buf.byteOffset, buf.byteOffset+buf.byteLength));
+    const keep=viewOf("new").sheet;
+    S.preview={wb, sheet: wb.getWorksheet(keep)?keep:wb.worksheets[0].name, name:"プレビュー: "+S.old.name+" → "+S.new.name, stale:false};
+    if(S.pending&&S.pending.side==="new") S.pending=null;
+    renderPane("new"); renderAll();
+    toast(`変換結果を右側に表示しました（${written} セル）`+(problems.length?`。注意: ${problems[0]}`:""), problems.length>0);
+  }catch(e){ toast("プレビューを作れませんでした: "+e.message, true); }
+}
+function closePreview(){ if(!S.preview) return; S.preview=null; renderPane("new"); renderAll(); }
+$("btnPreview").addEventListener("click",runPreview);
+$("btnPvRefresh").addEventListener("click",runPreview);
+$("btnPvClose").addEventListener("click",closePreview);
+
+/* ---------- file pickers & drop ---------- */
+document.addEventListener("click",(e)=>{ const b=e.target.closest("[data-open]"); if(b) $(b.dataset.open==="old"?"fileOld":"fileNew").click(); });
+$("fileOld").addEventListener("change",e=>{ const f=e.target.files[0]; e.target.value=""; if(f) loadWorkbook("old",f); });
+$("fileNew").addEventListener("change",e=>{ const f=e.target.files[0]; e.target.value=""; if(f) loadWorkbook("new",f); });
+["old","new"].forEach(side=>{
+  const sc=$("scroll-"+side);
+  sc.addEventListener("dragover",e=>{ e.preventDefault(); const d=sc.querySelector(".drop"); if(d) d.classList.add("over"); });
+  sc.addEventListener("dragleave",()=>{ const d=sc.querySelector(".drop"); if(d) d.classList.remove("over"); });
+  sc.addEventListener("drop",e=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if(f) loadWorkbook(side,f); });
+});
+
+/* ---------- other controls ---------- */
+$("btnUndo").addEventListener("click",undo); $("btnRedo").addEventListener("click",redo);
+$("btnClear").addEventListener("click",()=>{ if(!S.mappings.length) return; if(!confirm(`対応 ${S.mappings.length} 件をすべて削除しますか？（元に戻すで復元できます）`)) return; commit(); S.mappings=[]; renderAll(); });
+document.addEventListener("keydown",(e)=>{
+  if(e.target.matches("input,textarea")) return;
+  const mod=e.ctrlKey||e.metaKey;
+  if(mod&&e.key.toLowerCase()==="z"&&!e.shiftKey){ e.preventDefault(); undo(); }
+  else if(mod&&(e.key.toLowerCase()==="y"||(e.key.toLowerCase()==="z"&&e.shiftKey))){ e.preventDefault(); redo(); }
+  else if(e.key==="Escape"&&S.pending){ S.pending=null; renderAll(); }
+});
+window.addEventListener("beforeunload",(e)=>{ if(S.dirty&&S.mappings.length){ e.preventDefault(); e.returnValue=""; } });
+
+/* ---------- sample workbooks ---------- */
+async function buildSamples(){
+  const thin={style:"thin",color:{argb:"FF8A94A3"}};
+  const box={top:thin,left:thin,bottom:thin,right:thin};
+  const head={type:"pattern",pattern:"solid",fgColor:{argb:"FFDDE6F3"}};
+
+  const o=new ExcelJS.Workbook(); const a=o.addWorksheet("申込書");
+  a.columns=[{width:14},{width:22},{width:10},{width:10},{width:12}];
+  a.getCell("A1").value="お申込書（2023年版）"; a.getCell("A1").font={bold:true,size:14};
+  [["氏名","山田 太郎"],["電話番号","03-1234-5678"],["住所","東京都千代田区1-2-3"],["申込日",new Date(Date.UTC(2026,8,1))]].forEach(([k,v],i)=>{
+    const r=3+i; a.getCell("A"+r).value=k; a.getCell("A"+r).fill=head; a.getCell("B"+r).value=v;
+    a.getCell("A"+r).border=box; a.getCell("B"+r).border=box;
+  });
+  a.getCell("B6").numFmt='yyyy"年"m"月"d"日"';
+  ["品名","数量","単価"].forEach((t,i)=>{ const c=a.getCell(9,1+i); c.value=t; c.fill=head; c.font={bold:true}; c.border=box; });
+  [["コピー用紙A4",5,480],["ボールペン黒",20,110],["クリアファイル",30,35],["付箋",12,250]].forEach((row,i)=>row.forEach((v,j)=>{ const c=a.getCell(10+i,1+j); c.value=v; c.border=box; if(j===2) c.numFmt='#,##0"円"'; }));
+  const oBuf=await o.xlsx.writeBuffer();
+
+  const n=new ExcelJS.Workbook(); const b=n.addWorksheet("申込フォーム");
+  b.columns=[{width:6},{width:14},{width:16},{width:16},{width:10},{width:10},{width:12}];
+  b.mergeCells("A1:G1"); b.getCell("A1").value="お申込フォーム"; b.getCell("A1").font={bold:true,size:16}; b.getCell("A1").alignment={horizontal:"center"};
+  b.getCell("F2").value="版"; b.getCell("G2").border=box;
+  const lab={type:"pattern",pattern:"solid",fgColor:{argb:"FFE3F1EC"}};
+  [["お申込日",4],["お名前",5],["ご連絡先",6],["ご住所",7]].forEach(([k,r])=>{
+    b.mergeCells(`C${r}:E${r}`); b.getCell("B"+r).value=k; b.getCell("B"+r).fill=lab; b.getCell("B"+r).border=box; b.getCell("C"+r).border=box;
+  });
+  b.getCell("C4").numFmt="yyyy/mm/dd";
+  const cols=[["A","No"],["B","商品名"],["E","数量"],["F","単価"],["G","金額"]];
+  b.mergeCells("B10:D10");
+  cols.forEach(([col,t])=>{ const c=b.getCell(col+"10"); c.value=t; c.fill=lab; c.font={bold:true}; c.border=box; });
+  for(let i=0;i<5;i++){
+    const r=11+i; b.getCell("A"+r).value=i+1; b.mergeCells(`B${r}:D${r}`);
+    ["A","B","E","F","G"].forEach(col=>b.getCell(col+r).border=box);
+    b.getCell("F"+r).numFmt="#,##0"; b.getCell("G"+r).numFmt="#,##0";
+    b.getCell("G"+r).value={formula:`IF(E${r}="","",E${r}*F${r})`};
+  }
+  const nBuf=await n.xlsx.writeBuffer();
+
+  const ow=new ExcelJS.Workbook(); await ow.xlsx.load(oBuf.slice(0));
+  const nw=new ExcelJS.Workbook(); await nw.xlsx.load(nBuf.slice(0));
+  setWorkbook("old", ow, oBuf, "サンプル_旧申込書.xlsx");
+  setWorkbook("new", nw, nBuf, "サンプル_新申込フォーム.xlsx");
+}
+$("btnSample").addEventListener("click",async()=>{
+  if(S.mappings.length && !confirm("サンプルを開くと、いまの対応一覧は消えます。続けますか？")) return;
+  try{ S.mappings=[]; S.history=[]; S.future=[]; S.pending=null; S.preview=null; S.dirty=false; await buildSamples(); toast("サンプルを開きました。左の「山田 太郎」をクリックしてから、右の「お名前」の欄をクリックしてみてください"); }
+  catch(e){ toast("サンプルを作れませんでした: "+e.message, true); }
+});
+
+/* ---------- boot ---------- */
+if(typeof ExcelJS==="undefined"){
+  document.body.insertAdjacentHTML("afterbegin",'<div style="padding:10px 16px;background:#B42318;color:#fff">Excel読み込み用のライブラリを初期化できませんでした。ブラウザを最新版にして再読み込みしてください。</div>');
+}
+renderPane("old"); renderPane("new"); renderAll();
+})();
+</script>
+</body>
+</html>
